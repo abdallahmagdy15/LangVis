@@ -155,16 +155,6 @@ class NOTIFYICONDATAW(ctypes.Structure):
     ]
 
 
-class ICONINFO(ctypes.Structure):
-    _fields_ = [
-        ("fIcon", wt.BOOL),
-        ("xHotspot", wt.DWORD),
-        ("yHotspot", wt.DWORD),
-        ("hbmMask", ctypes.c_void_p),
-        ("hbmColor", ctypes.c_void_p),
-    ]
-
-
 class GdiplusStartupInput(ctypes.Structure):
     _fields_ = [
         ("GdiplusVersion", wt.UINT),
@@ -176,6 +166,10 @@ class GdiplusStartupInput(ctypes.Structure):
 
 class GpRect(ctypes.Structure):
     _fields_ = [("X", ctypes.c_int), ("Y", ctypes.c_int), ("Width", ctypes.c_int), ("Height", ctypes.c_int)]
+
+
+class RectF(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_float), ("y", ctypes.c_float), ("w", ctypes.c_float), ("h", ctypes.c_float)]
 
 
 class BitmapData(ctypes.Structure):
@@ -248,8 +242,6 @@ user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.POINTER(MONITORINFO)]
 user32.GetMonitorInfoW.restype = wt.BOOL
 user32.LoadIconW.argtypes = [HINSTANCE, ctypes.c_void_p]
 user32.LoadIconW.restype = HICON
-user32.CreateIconIndirect.argtypes = [ctypes.POINTER(ICONINFO)]
-user32.CreateIconIndirect.restype = HICON
 user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
 user32.GetCursorPos.restype = wt.BOOL
 user32.SetForegroundWindow.argtypes = [HWND]
@@ -311,6 +303,34 @@ gdiplus.GdipBitmapUnlockBits.argtypes = [ctypes.c_void_p, ctypes.POINTER(BitmapD
 gdiplus.GdipBitmapUnlockBits.restype = ctypes.c_int
 gdiplus.GdipDisposeImage.argtypes = [ctypes.c_void_p]
 gdiplus.GdipDisposeImage.restype = ctypes.c_int
+gdiplus.GdipSetSmoothingMode.argtypes = [ctypes.c_void_p, ctypes.c_int]
+gdiplus.GdipSetSmoothingMode.restype = ctypes.c_int
+gdiplus.GdipSetTextRenderingHint.argtypes = [ctypes.c_void_p, ctypes.c_int]
+gdiplus.GdipSetTextRenderingHint.restype = ctypes.c_int
+gdiplus.GdipCreateFontFamilyFromName.argtypes = [wt.LPCWSTR, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
+gdiplus.GdipCreateFontFamilyFromName.restype = ctypes.c_int
+gdiplus.GdipCreateFont.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)]
+gdiplus.GdipCreateFont.restype = ctypes.c_int
+gdiplus.GdipCreateSolidFill.argtypes = [ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p)]
+gdiplus.GdipCreateSolidFill.restype = ctypes.c_int
+gdiplus.GdipCreateStringFormat.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)]
+gdiplus.GdipCreateStringFormat.restype = ctypes.c_int
+gdiplus.GdipSetStringFormatAlign.argtypes = [ctypes.c_void_p, ctypes.c_int]
+gdiplus.GdipSetStringFormatAlign.restype = ctypes.c_int
+gdiplus.GdipSetStringFormatLineAlign.argtypes = [ctypes.c_void_p, ctypes.c_int]
+gdiplus.GdipSetStringFormatLineAlign.restype = ctypes.c_int
+gdiplus.GdipDrawString.argtypes = [ctypes.c_void_p, wt.LPCWSTR, ctypes.c_int, ctypes.c_void_p, ctypes.POINTER(RectF), ctypes.c_void_p, ctypes.c_void_p]
+gdiplus.GdipDrawString.restype = ctypes.c_int
+gdiplus.GdipDeleteFont.argtypes = [ctypes.c_void_p]
+gdiplus.GdipDeleteFont.restype = ctypes.c_int
+gdiplus.GdipDeleteFontFamily.argtypes = [ctypes.c_void_p]
+gdiplus.GdipDeleteFontFamily.restype = ctypes.c_int
+gdiplus.GdipDeleteStringFormat.argtypes = [ctypes.c_void_p]
+gdiplus.GdipDeleteStringFormat.restype = ctypes.c_int
+gdiplus.GdipDeleteBrush.argtypes = [ctypes.c_void_p]
+gdiplus.GdipDeleteBrush.restype = ctypes.c_int
+gdiplus.GdipCreateHICONFromBitmap.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
+gdiplus.GdipCreateHICONFromBitmap.restype = ctypes.c_int
 
 
 # --- settings (port of settings.rs) ---
@@ -609,61 +629,54 @@ class Overlay:
         return True
 
 
-# --- tray (port of tray.rs; default system icon instead of custom-drawn circle) ---
+# --- tray (port of tray.rs; language glyph "Aع" drawn with GDI+) ---
 
 NID = None
+ICON_ARGB = 0xFF3DA5FF  # sky blue
 
 
 def create_app_icon():
-    # Blue-circle icon drawn in a 32bpp DIB, like the Rust app (tray.rs create_app_icon).
-    S = 32
-    bmi = BITMAPINFO()
-    bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-    bmi.bmiHeader.biWidth = S
-    bmi.bmiHeader.biHeight = S
-    bmi.bmiHeader.biPlanes = 1
-    bmi.bmiHeader.biBitCount = 32
-    bmi.bmiHeader.biCompression = 0
-    hdc = user32.GetDC(None)
-    cbits = ctypes.c_void_p()
-    hbm_color = gdi32.CreateDIBSection(hdc, ctypes.byref(bmi), 0, ctypes.byref(cbits), None, 0)
-    if not hbm_color or not cbits.value:
-        user32.ReleaseDC(None, hdc)
+    # "A" (Latin) + "ع" (Arabic) language glyph, antialiased, on a transparent 32x32 bitmap.
+    bmp = ctypes.c_void_p()
+    if gdiplus.GdipCreateBitmapFromScan0(32, 32, 0, GDIP_PXFMT_32PARGB, None, ctypes.byref(bmp)) != 0:
         return None
-    px = (ctypes.c_ubyte * (S * S * 4)).from_address(cbits.value)
-    cx, cy, r, ri = 15.5, 15.5, 14.0, 11.0
-    for y in range(S):
-        for x in range(S):
-            dx = x - cx
-            dy = y - cy
-            dist = (dx * dx + dy * dy) ** 0.5
-            off = (y * S + x) * 4
-            if dist <= r:
-                if dist > ri:
-                    px[off], px[off + 1], px[off + 2], px[off + 3] = 180, 160, 40, 255
-                else:
-                    px[off], px[off + 1], px[off + 2], px[off + 3] = 200, 100, 20, 255
-            else:
-                px[off] = px[off + 1] = px[off + 2] = px[off + 3] = 0
-    mbmi = BITMAPINFO()
-    mbmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-    mbmi.bmiHeader.biWidth = S
-    mbmi.bmiHeader.biHeight = S
-    mbmi.bmiHeader.biPlanes = 1
-    mbmi.bmiHeader.biBitCount = 1
-    mbmi.bmiHeader.biCompression = 0
-    mbits = ctypes.c_void_p()
-    hbm_mask = gdi32.CreateDIBSection(hdc, ctypes.byref(mbmi), 0, ctypes.byref(mbits), None, 0)
-    user32.ReleaseDC(None, hdc)
-    ii = ICONINFO()
-    ii.fIcon = 1
-    ii.hbmMask = hbm_mask
-    ii.hbmColor = hbm_color
-    hicon = user32.CreateIconIndirect(ctypes.byref(ii))
-    gdi32.DeleteObject(hbm_color)
-    if hbm_mask:
-        gdi32.DeleteObject(hbm_mask)
-    return hicon
+    gr = ctypes.c_void_p()
+    fam = ctypes.c_void_p()
+    font = ctypes.c_void_p()
+    brush = ctypes.c_void_p()
+    fmt = ctypes.c_void_p()
+    hicon = ctypes.c_void_p()
+    try:
+        if gdiplus.GdipGetImageGraphicsContext(bmp, ctypes.byref(gr)) != 0:
+            return None
+        gdiplus.GdipSetSmoothingMode(gr, 4)        # AntiAlias
+        gdiplus.GdipSetTextRenderingHint(gr, 4)    # AntiAliasGridFit
+        if gdiplus.GdipCreateFontFamilyFromName("Segoe UI", None, ctypes.byref(fam)) != 0:
+            return None
+        gdiplus.GdipCreateFont(fam, 15.0, 1, 2, ctypes.byref(font))  # Bold, UnitPixel
+        gdiplus.GdipCreateSolidFill(ICON_ARGB, ctypes.byref(brush))
+        gdiplus.GdipCreateStringFormat(0, 0, ctypes.byref(fmt))
+        gdiplus.GdipSetStringFormatAlign(fmt, 1)       # center
+        gdiplus.GdipSetStringFormatLineAlign(fmt, 1)   # middle
+        rc_a = RectF(0.0, 2.0, 18.0, 28.0)
+        rc_ayn = RectF(14.0, 2.0, 18.0, 28.0)
+        gdiplus.GdipDrawString(gr, "A", -1, font, ctypes.byref(rc_a), fmt, brush)
+        gdiplus.GdipDrawString(gr, "ع", -1, font, ctypes.byref(rc_ayn), fmt, brush)
+        if gdiplus.GdipCreateHICONFromBitmap(bmp, ctypes.byref(hicon)) != 0:
+            return None
+        return hicon.value
+    finally:
+        if fmt.value:
+            gdiplus.GdipDeleteStringFormat(fmt)
+        if brush.value:
+            gdiplus.GdipDeleteBrush(brush)
+        if font.value:
+            gdiplus.GdipDeleteFont(font)
+        if fam.value:
+            gdiplus.GdipDeleteFontFamily(fam)
+        if gr.value:
+            gdiplus.GdipDeleteGraphics(gr)
+        gdiplus.GdipDisposeImage(bmp)
 
 
 def add_tray_icon(hwnd):
