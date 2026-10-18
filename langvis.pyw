@@ -653,13 +653,13 @@ def create_app_icon():
         gdiplus.GdipSetTextRenderingHint(gr, 4)    # AntiAliasGridFit
         if gdiplus.GdipCreateFontFamilyFromName("Segoe UI", None, ctypes.byref(fam)) != 0:
             return None
-        gdiplus.GdipCreateFont(fam, 15.0, 1, 2, ctypes.byref(font))  # Bold, UnitPixel
+        gdiplus.GdipCreateFont(fam, 21.0, 1, 2, ctypes.byref(font))  # Bold, UnitPixel
         gdiplus.GdipCreateSolidFill(ICON_ARGB, ctypes.byref(brush))
         gdiplus.GdipCreateStringFormat(0, 0, ctypes.byref(fmt))
         gdiplus.GdipSetStringFormatAlign(fmt, 1)       # center
         gdiplus.GdipSetStringFormatLineAlign(fmt, 1)   # middle
-        rc_a = RectF(0.0, 2.0, 18.0, 28.0)
-        rc_ayn = RectF(14.0, 2.0, 18.0, 28.0)
+        rc_a = RectF(-2.0, -2.0, 22.0, 36.0)
+        rc_ayn = RectF(12.0, -2.0, 22.0, 36.0)
         gdiplus.GdipDrawString(gr, "A", -1, font, ctypes.byref(rc_a), fmt, brush)
         gdiplus.GdipDrawString(gr, "ع", -1, font, ctypes.byref(rc_ayn), fmt, brush)
         if gdiplus.GdipCreateHICONFromBitmap(bmp, ctypes.byref(hicon)) != 0:
