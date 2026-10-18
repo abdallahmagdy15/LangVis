@@ -155,6 +155,16 @@ class NOTIFYICONDATAW(ctypes.Structure):
     ]
 
 
+class ICONINFO(ctypes.Structure):
+    _fields_ = [
+        ("fIcon", wt.BOOL),
+        ("xHotspot", wt.DWORD),
+        ("yHotspot", wt.DWORD),
+        ("hbmMask", ctypes.c_void_p),
+        ("hbmColor", ctypes.c_void_p),
+    ]
+
+
 class GdiplusStartupInput(ctypes.Structure):
     _fields_ = [
         ("GdiplusVersion", wt.UINT),
@@ -238,6 +248,8 @@ user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.POINTER(MONITORINFO)]
 user32.GetMonitorInfoW.restype = wt.BOOL
 user32.LoadIconW.argtypes = [HINSTANCE, ctypes.c_void_p]
 user32.LoadIconW.restype = HICON
+user32.CreateIconIndirect.argtypes = [ctypes.POINTER(ICONINFO)]
+user32.CreateIconIndirect.restype = HICON
 user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
 user32.GetCursorPos.restype = wt.BOOL
 user32.SetForegroundWindow.argtypes = [HWND]
@@ -602,6 +614,58 @@ class Overlay:
 NID = None
 
 
+def create_app_icon():
+    # Blue-circle icon drawn in a 32bpp DIB, like the Rust app (tray.rs create_app_icon).
+    S = 32
+    bmi = BITMAPINFO()
+    bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+    bmi.bmiHeader.biWidth = S
+    bmi.bmiHeader.biHeight = S
+    bmi.bmiHeader.biPlanes = 1
+    bmi.bmiHeader.biBitCount = 32
+    bmi.bmiHeader.biCompression = 0
+    hdc = user32.GetDC(None)
+    cbits = ctypes.c_void_p()
+    hbm_color = gdi32.CreateDIBSection(hdc, ctypes.byref(bmi), 0, ctypes.byref(cbits), None, 0)
+    if not hbm_color or not cbits.value:
+        user32.ReleaseDC(None, hdc)
+        return None
+    px = (ctypes.c_ubyte * (S * S * 4)).from_address(cbits.value)
+    cx, cy, r, ri = 15.5, 15.5, 14.0, 11.0
+    for y in range(S):
+        for x in range(S):
+            dx = x - cx
+            dy = y - cy
+            dist = (dx * dx + dy * dy) ** 0.5
+            off = (y * S + x) * 4
+            if dist <= r:
+                if dist > ri:
+                    px[off], px[off + 1], px[off + 2], px[off + 3] = 180, 160, 40, 255
+                else:
+                    px[off], px[off + 1], px[off + 2], px[off + 3] = 200, 100, 20, 255
+            else:
+                px[off] = px[off + 1] = px[off + 2] = px[off + 3] = 0
+    mbmi = BITMAPINFO()
+    mbmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+    mbmi.bmiHeader.biWidth = S
+    mbmi.bmiHeader.biHeight = S
+    mbmi.bmiHeader.biPlanes = 1
+    mbmi.bmiHeader.biBitCount = 1
+    mbmi.bmiHeader.biCompression = 0
+    mbits = ctypes.c_void_p()
+    hbm_mask = gdi32.CreateDIBSection(hdc, ctypes.byref(mbmi), 0, ctypes.byref(mbits), None, 0)
+    user32.ReleaseDC(None, hdc)
+    ii = ICONINFO()
+    ii.fIcon = 1
+    ii.hbmMask = hbm_mask
+    ii.hbmColor = hbm_color
+    hicon = user32.CreateIconIndirect(ctypes.byref(ii))
+    gdi32.DeleteObject(hbm_color)
+    if hbm_mask:
+        gdi32.DeleteObject(hbm_mask)
+    return hicon
+
+
 def add_tray_icon(hwnd):
     global NID
     nid = NOTIFYICONDATAW()
@@ -610,7 +674,12 @@ def add_tray_icon(hwnd):
     nid.uID = 1
     nid.uFlags = 0x1 | 0x2 | 0x4
     nid.uCallbackMessage = WM_TRAYICON
-    nid.hIcon = user32.LoadIconW(None, 32512)
+    icon = None
+    try:
+        icon = create_app_icon()
+    except Exception as e:
+        log("create_app_icon failed: %r" % (e,))
+    nid.hIcon = icon if icon else user32.LoadIconW(None, 32512)
     nid.szTip = APP_NAME
     NID = nid
     if not shell32.Shell_NotifyIconW(0, ctypes.byref(nid)):
